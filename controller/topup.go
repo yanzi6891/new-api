@@ -24,10 +24,15 @@ import (
 
 func GetTopUpInfo(c *gin.Context) {
 	// 获取支付方式
-	payMethods := operation_setting.PayMethods
+	payMethods := make([]map[string]string, len(operation_setting.PayMethods))
+	copy(payMethods, operation_setting.PayMethods)
+	enableOnlineTopUp := operation_setting.PayAddress != "" && operation_setting.EpayId != "" && operation_setting.EpayKey != ""
+	enableStripeTopUp := setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != ""
+	enableAlipayOfficialTopUp := service.IsAlipayOfficialEnabled()
+	enableWeChatOfficialTopUp := service.IsWeChatPayOfficialEnabled()
 
 	// 如果启用了 Stripe 支付，添加到支付方法列表
-	if setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != "" {
+	if enableStripeTopUp {
 		// 检查是否已经包含 Stripe
 		hasStripe := false
 		for _, method := range payMethods {
@@ -78,11 +83,31 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	if enableAlipayOfficialTopUp {
+		payMethods = append(payMethods, map[string]string{
+			"name":      "Alipay Official",
+			"type":      PaymentMethodAlipayOfficial,
+			"color":     "rgba(var(--semi-blue-5), 1)",
+			"min_topup": strconv.Itoa(operation_setting.MinTopUp),
+		})
+	}
+
+	if enableWeChatOfficialTopUp {
+		payMethods = append(payMethods, map[string]string{
+			"name":      "WeChat Pay Official",
+			"type":      PaymentMethodWeChatNative,
+			"color":     "rgba(var(--semi-green-5), 1)",
+			"min_topup": strconv.Itoa(operation_setting.MinTopUp),
+		})
+	}
+
 	data := gin.H{
-		"enable_online_topup": operation_setting.PayAddress != "" && operation_setting.EpayId != "" && operation_setting.EpayKey != "",
-		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != "",
-		"enable_creem_topup":  setting.CreemApiKey != "" && setting.CreemProducts != "[]",
-		"enable_waffo_topup": enableWaffo,
+		"enable_online_topup":          enableOnlineTopUp,
+		"enable_stripe_topup":          enableStripeTopUp,
+		"enable_alipay_official_topup": enableAlipayOfficialTopUp,
+		"enable_wechat_official_topup": enableWeChatOfficialTopUp,
+		"enable_creem_topup":           setting.CreemApiKey != "" && setting.CreemProducts != "[]",
+		"enable_waffo_topup":           enableWaffo,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
@@ -463,4 +488,3 @@ func AdminCompleteTopUp(c *gin.Context) {
 	}
 	common.ApiSuccess(c, nil)
 }
-

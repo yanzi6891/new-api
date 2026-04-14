@@ -16,30 +16,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Badge,
+  Button,
+  Empty,
+  Input,
   Modal,
   Table,
-  Badge,
-  Typography,
-  Toast,
-  Empty,
-  Button,
-  Input,
   Tag,
+  Toast,
+  Typography,
 } from '@douyinfe/semi-ui';
+import { IconSearch } from '@douyinfe/semi-icons';
 import {
   IllustrationNoResult,
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { Coins } from 'lucide-react';
-import { IconSearch } from '@douyinfe/semi-icons';
+
 import { API, timestamp2string } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
+
 const { Text } = Typography;
 
-// 状态映射配置
 const STATUS_CONFIG = {
   success: { type: 'success', key: '成功' },
   pending: { type: 'warning', key: '待支付' },
@@ -47,13 +49,14 @@ const STATUS_CONFIG = {
   expired: { type: 'danger', key: '已过期' },
 };
 
-// 支付方式映射
 const PAYMENT_METHOD_MAP = {
   stripe: 'Stripe',
   creem: 'Creem',
   waffo: 'Waffo',
   alipay: '支付宝',
   wxpay: '微信',
+  alipay_official: '支付宝官方',
+  wxpay_native: '微信支付官方',
 };
 
 const TopupHistoryModal = ({ visible, onCancel, t }) => {
@@ -65,22 +68,23 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
   const [keyword, setKeyword] = useState('');
   const isMobile = useIsMobile();
 
+  const userIsAdmin = useMemo(() => isAdmin(), []);
+
   const loadTopups = async (currentPage, currentPageSize) => {
     setLoading(true);
     try {
-      const base = isAdmin() ? '/api/user/topup' : '/api/user/topup/self';
-      const qs =
+      const base = userIsAdmin ? '/api/user/topup' : '/api/user/topup/self';
+      const query =
         `p=${currentPage}&page_size=${currentPageSize}` +
         (keyword ? `&keyword=${encodeURIComponent(keyword)}` : '');
-      const endpoint = `${base}?${qs}`;
-      const res = await API.get(endpoint);
+      const res = await API.get(`${base}?${query}`);
       const { success, message, data } = res.data;
       if (success) {
         setTopups(data.items || []);
         setTotal(data.total || 0);
-      } else {
-        Toast.error({ content: message || t('加载失败') });
+        return;
       }
+      Toast.error({ content: message || t('加载失败') });
     } catch (error) {
       Toast.error({ content: t('加载账单失败') });
     } finally {
@@ -88,27 +92,6 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     }
   };
 
-  useEffect(() => {
-    if (visible) {
-      loadTopups(page, pageSize);
-    }
-  }, [visible, page, pageSize, keyword]);
-
-  const handlePageChange = (currentPage) => {
-    setPage(currentPage);
-  };
-
-  const handlePageSizeChange = (currentPageSize) => {
-    setPageSize(currentPageSize);
-    setPage(1);
-  };
-
-  const handleKeywordChange = (value) => {
-    setKeyword(value);
-    setPage(1);
-  };
-
-  // 管理员补单
   const handleAdminComplete = async (tradeNo) => {
     try {
       const res = await API.post('/api/user/topup/complete', {
@@ -118,10 +101,10 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       if (success) {
         Toast.success({ content: t('补单成功') });
         await loadTopups(page, pageSize);
-      } else {
-        Toast.error({ content: message || t('补单失败') });
+        return;
       }
-    } catch (e) {
+      Toast.error({ content: message || t('补单失败') });
+    } catch (error) {
       Toast.error({ content: t('补单失败') });
     }
   };
@@ -134,7 +117,6 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     });
   };
 
-  // 渲染状态徽章
   const renderStatusBadge = (status) => {
     const config = STATUS_CONFIG[status] || { type: 'primary', key: status };
     return (
@@ -145,10 +127,9 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     );
   };
 
-  // 渲染支付方式
-  const renderPaymentMethod = (pm) => {
-    const displayName = PAYMENT_METHOD_MAP[pm];
-    return <Text>{displayName ? t(displayName) : pm || '-'}</Text>;
+  const renderPaymentMethod = (paymentMethod) => {
+    const displayName = PAYMENT_METHOD_MAP[paymentMethod];
+    return <Text>{displayName ? t(displayName) : paymentMethod || '-'}</Text>;
   };
 
   const isSubscriptionTopup = (record) => {
@@ -156,11 +137,8 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     return Number(record?.amount || 0) === 0 && tradeNo.startsWith('sub');
   };
 
-  // 检查是否为管理员
-  const userIsAdmin = useMemo(() => isAdmin(), []);
-
   const columns = useMemo(() => {
-    const baseColumns = [
+    const nextColumns = [
       {
         title: t('订单号'),
         dataIndex: 'trade_no',
@@ -177,7 +155,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('充值额度'),
         dataIndex: 'amount',
         key: 'amount',
-        render: (amount, record) => {
+        render: (recordAmount, record) => {
           if (isSubscriptionTopup(record)) {
             return (
               <Tag color='purple' shape='circle' size='small'>
@@ -188,7 +166,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
           return (
             <span className='flex items-center gap-1'>
               <Coins size={16} />
-              <Text>{amount}</Text>
+              <Text>{recordAmount}</Text>
             </span>
           );
         },
@@ -197,7 +175,9 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('支付金额'),
         dataIndex: 'money',
         key: 'money',
-        render: (money) => <Text type='danger'>¥{money.toFixed(2)}</Text>,
+        render: (money) => (
+          <Text type='danger'>¥{Number(money || 0).toFixed(2)}</Text>
+        ),
       },
       {
         title: t('状态'),
@@ -207,40 +187,44 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       },
     ];
 
-    // 管理员才显示操作列
     if (userIsAdmin) {
-      baseColumns.push({
+      nextColumns.push({
         title: t('操作'),
         key: 'action',
         render: (_, record) => {
-          const actions = [];
-          if (record.status === 'pending') {
-            actions.push(
-              <Button
-                key="complete"
-                size='small'
-                type='primary'
-                theme='outline'
-                onClick={() => confirmAdminComplete(record.trade_no)}
-              >
-                {t('补单')}
-              </Button>
-            );
+          if (record.status !== 'pending') {
+            return null;
           }
-          return actions.length > 0 ? <>{actions}</> : null;
+          return (
+            <Button
+              size='small'
+              type='primary'
+              theme='outline'
+              onClick={() => confirmAdminComplete(record.trade_no)}
+            >
+              {t('补单')}
+            </Button>
+          );
         },
       });
     }
 
-    baseColumns.push({
+    nextColumns.push({
       title: t('创建时间'),
       dataIndex: 'create_time',
       key: 'create_time',
       render: (time) => timestamp2string(time),
     });
 
-    return baseColumns;
+    return nextColumns;
   }, [t, userIsAdmin]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    loadTopups(page, pageSize);
+  }, [visible, page, pageSize, keyword]);
 
   return (
     <Modal
@@ -255,10 +239,14 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
           prefix={<IconSearch />}
           placeholder={t('订单号')}
           value={keyword}
-          onChange={handleKeywordChange}
+          onChange={(value) => {
+            setKeyword(value);
+            setPage(1);
+          }}
           showClear
         />
       </div>
+
       <Table
         columns={columns}
         dataSource={topups}
@@ -266,12 +254,15 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         rowKey='id'
         pagination={{
           currentPage: page,
-          pageSize: pageSize,
-          total: total,
+          pageSize,
+          total,
           showSizeChanger: true,
           pageSizeOpts: [10, 20, 50, 100],
-          onPageChange: handlePageChange,
-          onPageSizeChange: handlePageSizeChange,
+          onPageChange: setPage,
+          onPageSizeChange: (nextPageSize) => {
+            setPageSize(nextPageSize);
+            setPage(1);
+          },
         }}
         size='small'
         empty={

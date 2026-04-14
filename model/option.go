@@ -86,6 +86,18 @@ func InitOptionMap() {
 	common.OptionMap["StripePriceId"] = setting.StripePriceId
 	common.OptionMap["StripeUnitPrice"] = strconv.FormatFloat(setting.StripeUnitPrice, 'f', -1, 64)
 	common.OptionMap["StripePromotionCodesEnabled"] = strconv.FormatBool(setting.StripePromotionCodesEnabled)
+	common.OptionMap["AlipayOfficialEnabled"] = strconv.FormatBool(setting.AlipayOfficialEnabled)
+	common.OptionMap["AlipayOfficialAppId"] = setting.AlipayOfficialAppId
+	common.OptionMap["AlipayOfficialPrivateKey"] = setting.AlipayOfficialPrivateKey
+	common.OptionMap["AlipayOfficialPublicKey"] = setting.AlipayOfficialPublicKey
+	common.OptionMap["AlipayOfficialGateway"] = setting.AlipayOfficialGateway
+	common.OptionMap["WeChatPayOfficialEnabled"] = strconv.FormatBool(setting.WeChatPayOfficialEnabled)
+	common.OptionMap["WeChatPayOfficialAppId"] = setting.WeChatPayOfficialAppId
+	common.OptionMap["WeChatPayOfficialMchId"] = setting.WeChatPayOfficialMchId
+	common.OptionMap["WeChatPayOfficialSerialNo"] = setting.WeChatPayOfficialSerialNo
+	common.OptionMap["WeChatPayOfficialPrivateKey"] = setting.WeChatPayOfficialPrivateKey
+	common.OptionMap["WeChatPayOfficialAPIv3Key"] = setting.WeChatPayOfficialAPIv3Key
+	common.OptionMap["WeChatPayOfficialPlatformCert"] = setting.WeChatPayOfficialPlatformCert
 	common.OptionMap["CreemApiKey"] = setting.CreemApiKey
 	common.OptionMap["CreemProducts"] = setting.CreemProducts
 	common.OptionMap["CreemTestMode"] = strconv.FormatBool(setting.CreemTestMode)
@@ -369,6 +381,30 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.StripeMinTopUp, _ = strconv.Atoi(value)
 	case "StripePromotionCodesEnabled":
 		setting.StripePromotionCodesEnabled = value == "true"
+	case "AlipayOfficialEnabled":
+		setting.AlipayOfficialEnabled = value == "true"
+	case "AlipayOfficialAppId":
+		setting.AlipayOfficialAppId = value
+	case "AlipayOfficialPrivateKey":
+		setting.AlipayOfficialPrivateKey = value
+	case "AlipayOfficialPublicKey":
+		setting.AlipayOfficialPublicKey = value
+	case "AlipayOfficialGateway":
+		setting.AlipayOfficialGateway = value
+	case "WeChatPayOfficialEnabled":
+		setting.WeChatPayOfficialEnabled = value == "true"
+	case "WeChatPayOfficialAppId":
+		setting.WeChatPayOfficialAppId = value
+	case "WeChatPayOfficialMchId":
+		setting.WeChatPayOfficialMchId = value
+	case "WeChatPayOfficialSerialNo":
+		setting.WeChatPayOfficialSerialNo = value
+	case "WeChatPayOfficialPrivateKey":
+		setting.WeChatPayOfficialPrivateKey = value
+	case "WeChatPayOfficialAPIv3Key":
+		setting.WeChatPayOfficialAPIv3Key = value
+	case "WeChatPayOfficialPlatformCert":
+		setting.WeChatPayOfficialPlatformCert = value
 	case "CreemApiKey":
 		setting.CreemApiKey = value
 	case "CreemProducts":

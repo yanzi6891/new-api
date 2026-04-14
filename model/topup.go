@@ -306,6 +306,69 @@ func ManualCompleteTopUp(tradeNo string) error {
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney))
 	return nil
 }
+
+func CompleteTopUpByTradeNo(tradeNo string) error {
+	if tradeNo == "" {
+		return errors.New("trade no is required")
+	}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	var userId int
+	var quotaToAdd int
+	var payMoney float64
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+			return errors.New("topup order does not exist")
+		}
+
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil
+		}
+
+		if topUp.Status != common.TopUpStatusPending {
+			return errors.New("order status is not pending")
+		}
+
+		if topUp.PaymentMethod == "stripe" {
+			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+			quotaToAdd = int(decimal.NewFromFloat(topUp.Money).Mul(dQuotaPerUnit).IntPart())
+		} else {
+			dAmount := decimal.NewFromInt(topUp.Amount)
+			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+			quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		}
+		if quotaToAdd <= 0 {
+			return errors.New("invalid topup quota")
+		}
+
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+
+		userId = topUp.UserId
+		payMoney = topUp.Money
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	RecordLog(userId, LogTypeTopup, fmt.Sprintf("在线充值成功，充值金额: %v，支付金额：%.2f", logger.FormatQuota(quotaToAdd), payMoney))
+	return nil
+}
+
 func RechargeCreem(referenceId string, customerEmail string, customerName string) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")

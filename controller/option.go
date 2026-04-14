@@ -188,6 +188,22 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "AlipayOfficialEnabled":
+		if option.Value == "true" && (setting.AlipayOfficialAppId == "" || setting.AlipayOfficialPrivateKey == "" || setting.AlipayOfficialPublicKey == "") {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "cannot enable official alipay payment before app id and keys are configured",
+			})
+			return
+		}
+	case "WeChatPayOfficialEnabled":
+		if option.Value == "true" && (setting.WeChatPayOfficialAppId == "" || setting.WeChatPayOfficialMchId == "" || setting.WeChatPayOfficialSerialNo == "" || setting.WeChatPayOfficialPrivateKey == "" || setting.WeChatPayOfficialAPIv3Key == "" || setting.WeChatPayOfficialPlatformCert == "") {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "cannot enable official wechat payment before app id, mch id, serial number, private key, apiv3 key and platform certificate are configured",
+			})
+			return
+		}
 	case "GroupRatio":
 		err = ratio_setting.CheckGroupRatio(option.Value.(string))
 		if err != nil {
