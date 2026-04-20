@@ -27,6 +27,7 @@ import {
   Banner,
   Skeleton,
   Form,
+  Modal,
   Space,
   Row,
   Col,
@@ -92,6 +93,9 @@ const RechargeCard = ({
   enableWaffoTopUp,
   waffoTopUp,
   waffoPayMethods,
+  enableManualTopUp,
+  manualTopUp,
+  manualTopUpConfig = {},
   subscriptionLoading = false,
   subscriptionPlans = [],
   billingPreference,
@@ -105,8 +109,84 @@ const RechargeCard = ({
   const initialTabSetRef = useRef(false);
   const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
   const [activeTab, setActiveTab] = useState('topup');
+  const [manualPayment, setManualPayment] = useState(null);
+  const [manualPaymentLoadingType, setManualPaymentLoadingType] = useState('');
   const shouldShowSubscription =
     !subscriptionLoading && subscriptionPlans.length > 0;
+  const nonEpayMethodTypes = ['stripe', 'alipay_official', 'wxpay_native'];
+  const visiblePayMethods = (payMethods || []).filter((method) => {
+    if (!method || method.type === 'waffo') {
+      return false;
+    }
+    if (enableManualTopUp && !nonEpayMethodTypes.includes(method.type)) {
+      return false;
+    }
+    return true;
+  });
+  const manualPayMethods = enableManualTopUp
+    ? [
+        manualTopUpConfig.alipayQRCode
+          ? {
+              type: 'manual_alipay',
+              name: t('支付宝充值'),
+              title: t('支付宝收款码'),
+              qrCode: manualTopUpConfig.alipayQRCode,
+            }
+          : null,
+        manualTopUpConfig.wechatQRCode
+          ? {
+              type: 'manual_wechat',
+              name: t('微信充值'),
+              title: t('微信收款码'),
+              qrCode: manualTopUpConfig.wechatQRCode,
+            }
+          : null,
+      ].filter(Boolean)
+    : [];
+  const selectedManualPayMethod = manualPayment?.method || null;
+  const manualPaymentOrder = manualPayment?.order || null;
+
+  const closeManualPaymentModal = () => {
+    setManualPayment(null);
+  };
+
+  const getManualAmountQRCode = (methodType, money) => {
+    const amountKey = String(Number(money || 0).toFixed(2));
+    const integerKey = String(Number(money || 0));
+    const amountMap =
+      methodType === 'manual_alipay'
+        ? manualTopUpConfig.alipayAmountQRCodes || {}
+        : manualTopUpConfig.wechatAmountQRCodes || {};
+    return amountMap[amountKey] || amountMap[integerKey] || '';
+  };
+
+  const beginManualPayment = async (method) => {
+    if (Number(topUpCount || 0) < Number(minTopUp || 1)) {
+      return;
+    }
+    setManualPaymentLoadingType(method.type);
+    try {
+      const order = await manualTopUp(method.type);
+      if (order) {
+        const amountQRCode = getManualAmountQRCode(method.type, order.money);
+        setManualPayment({
+          method: {
+            ...method,
+            qrCode: amountQRCode || method.qrCode,
+            usingAmountQRCode: Boolean(amountQRCode),
+          },
+          order,
+        });
+      }
+    } finally {
+      setManualPaymentLoadingType('');
+    }
+  };
+
+  const finishManualPayment = () => {
+    closeManualPaymentModal();
+    onOpenHistory?.();
+  };
 
   useEffect(() => {
     if (initialTabSetRef.current) return;
@@ -233,6 +313,7 @@ const RechargeCard = ({
           enableOfficialTopUp ||
           enableStripeTopUp ||
           enableCreemTopUp ||
+          enableManualTopUp ||
           enableWaffoTopUp ? (
           <Form
             getFormApi={(api) => (onlineFormApiRef.current = api)}
@@ -242,6 +323,7 @@ const RechargeCard = ({
               {(enableOnlineTopUp ||
                 enableOfficialTopUp ||
                 enableStripeTopUp ||
+                enableManualTopUp ||
                 enableWaffoTopUp) && (
                 <Row gutter={12}>
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
@@ -252,6 +334,7 @@ const RechargeCard = ({
                         !enableOnlineTopUp &&
                         !enableOfficialTopUp &&
                         !enableStripeTopUp &&
+                        !enableManualTopUp &&
                         !enableWaffoTopUp
                       }
                       placeholder={
@@ -305,11 +388,12 @@ const RechargeCard = ({
                       style={{ width: '100%' }}
                     />
                   </Col>
-                  {payMethods && payMethods.filter(m => m.type !== 'waffo').length > 0 && (
+                  {(visiblePayMethods.length > 0 ||
+                    manualPayMethods.length > 0) && (
                   <Col xs={24} sm={24} md={24} lg={14} xl={14}>
                     <Form.Slot label={t('选择支付方式')}>
                         <Space wrap>
-                          {payMethods.filter(m => m.type !== 'waffo').map((payMethod) => {
+                          {visiblePayMethods.map((payMethod) => {
                             const minTopupVal = Number(payMethod.min_topup) || 0;
                             const disabled =
                               !isPaymentMethodEnabled(payMethod.type) ||
@@ -368,6 +452,28 @@ const RechargeCard = ({
                               </React.Fragment>
                             );
                           })}
+                          {manualPayMethods.map((method) => (
+                            <Button
+                              key={method.type}
+                              theme='outline'
+                              type='tertiary'
+                              onClick={() => beginManualPayment(method)}
+                              disabled={
+                                Number(topUpCount || 0) < Number(minTopUp || 1)
+                              }
+                              loading={manualPaymentLoadingType === method.type}
+                              icon={
+                                method.type === 'manual_alipay' ? (
+                                  <SiAlipay size={18} color='#1677FF' />
+                                ) : (
+                                  <SiWechat size={18} color='#07C160' />
+                                )
+                              }
+                              className='!rounded-lg !px-4 !py-2'
+                            >
+                              {method.name}
+                            </Button>
+                          ))}
                         </Space>
                     </Form.Slot>
                   </Col>
@@ -378,6 +484,7 @@ const RechargeCard = ({
               {(enableOnlineTopUp ||
                 enableOfficialTopUp ||
                 enableStripeTopUp ||
+                enableManualTopUp ||
                 enableWaffoTopUp) && (
                 <Form.Slot
                   label={
@@ -454,8 +561,8 @@ const RechargeCard = ({
                             width: '100%',
                           }}
                           bodyStyle={{ padding: '12px' }}
-                          onClick={() => {
-                            selectPresetAmount(preset);
+                          onClick={async () => {
+                            await selectPresetAmount(preset);
                             onlineFormApiRef.current?.setValue(
                               'topUpCount',
                               preset.value,
@@ -635,6 +742,7 @@ const RechargeCard = ({
   );
 
   return (
+    <>
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* 卡片头部 */}
       <div className='flex items-center justify-between mb-4'>
@@ -703,6 +811,84 @@ const RechargeCard = ({
         topupContent
       )}
     </Card>
+    <Modal
+      title={selectedManualPayMethod?.title || t('扫码充值')}
+      visible={Boolean(selectedManualPayMethod)}
+      onCancel={closeManualPaymentModal}
+      onOk={finishManualPayment}
+      okText={t('我已付款，查看账单')}
+      cancelText={t('取消')}
+      maskClosable={false}
+      centered
+      size='large'
+    >
+      {selectedManualPayMethod && (
+        <div className='text-center'>
+          <div className='mb-3 text-sm text-gray-500'>
+            {selectedManualPayMethod.usingAmountQRCode
+              ? t('订单已创建，请扫码付款，当前二维码已按实付金额生成。')
+              : t('订单已创建，请扫码付款，并在付款备注中填写订单号。')}
+          </div>
+          {manualPaymentOrder?.trade_no && (
+            <div className='mb-3'>
+              <Text type='secondary'>{t('订单号')}：</Text>
+              <Text copyable strong>
+                {manualPaymentOrder.trade_no}
+              </Text>
+            </div>
+          )}
+          <div
+            style={{
+              width: 'min(420px, 100%)',
+              margin: '0 auto 12px',
+              padding: 12,
+              background: '#fff',
+              borderRadius: 12,
+              border: '1px solid var(--semi-color-border)',
+            }}
+          >
+            <img
+              src={selectedManualPayMethod.qrCode}
+              alt={`${selectedManualPayMethod.name} QR code`}
+              style={{
+                width: '100%',
+                maxHeight: 420,
+                objectFit: 'contain',
+                imageRendering: 'auto',
+                display: 'block',
+              }}
+            />
+          </div>
+          <Button
+            theme='borderless'
+            type='primary'
+            size='small'
+            onClick={() => window.open(selectedManualPayMethod.qrCode, '_blank')}
+          >
+            {t('打开原图扫码')}
+          </Button>
+          <div className='space-y-1 text-sm'>
+            <div>
+              <Text type='secondary'>{t('充值数量')}：</Text>
+              <Text strong>{renderQuotaWithAmount(topUpCount)}</Text>
+            </div>
+            <div>
+              <Text type='secondary'>{t('实付金额')}：</Text>
+              <Text strong style={{ color: 'red' }}>
+                {Number(manualPaymentOrder?.money || 0).toFixed(2)}
+              </Text>
+            </div>
+          </div>
+          <div className='mt-3 text-xs text-gray-500 text-left'>
+            {selectedManualPayMethod.usingAmountQRCode
+              ? t('如果支付 App 仍未自动带出金额，请手动输入上方实付金额。')
+              : manualTopUpConfig.instructions ||
+                t('付款时请备注订单号，管理员确认到账后会为您入账。')}
+          </div>
+        </div>
+      )}
+    </Modal>
+    </>
   );
 };
 

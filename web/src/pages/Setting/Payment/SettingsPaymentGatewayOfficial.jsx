@@ -92,16 +92,7 @@ export default function SettingsPaymentGatewayOfficial(props) {
 
     setLoading(true);
     try {
-      const options = [
-        {
-          key: 'AlipayOfficialEnabled',
-          value: inputs.AlipayOfficialEnabled ? 'true' : 'false',
-        },
-        {
-          key: 'WeChatPayOfficialEnabled',
-          value: inputs.WeChatPayOfficialEnabled ? 'true' : 'false',
-        },
-      ];
+      const options = [];
 
       if (inputs.AlipayOfficialAppId !== originInputs.AlipayOfficialAppId) {
         options.push({
@@ -170,16 +161,28 @@ export default function SettingsPaymentGatewayOfficial(props) {
         });
       }
 
-      const requests = options.map((item) =>
-        API.put('/api/option/', {
+      options.push({
+        key: 'AlipayOfficialEnabled',
+        value: inputs.AlipayOfficialEnabled ? 'true' : 'false',
+      });
+      options.push({
+        key: 'WeChatPayOfficialEnabled',
+        value: inputs.WeChatPayOfficialEnabled ? 'true' : 'false',
+      });
+
+      const failedMessages = [];
+      for (const item of options) {
+        const res = await API.put('/api/option/', {
           key: item.key,
           value: item.value,
-        }),
-      );
-      const results = await Promise.all(requests);
-      const failed = results.filter((res) => !res.data.success);
-      if (failed.length > 0) {
-        failed.forEach((res) => showError(res.data.message));
+        });
+        if (!res.data.success) {
+          failedMessages.push(res.data.message);
+        }
+      }
+
+      if (failedMessages.length > 0) {
+        failedMessages.forEach((message) => showError(message));
       } else {
         showSuccess(t('更新成功'));
         props.refresh?.();

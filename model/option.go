@@ -91,6 +91,12 @@ func InitOptionMap() {
 	common.OptionMap["AlipayOfficialPrivateKey"] = setting.AlipayOfficialPrivateKey
 	common.OptionMap["AlipayOfficialPublicKey"] = setting.AlipayOfficialPublicKey
 	common.OptionMap["AlipayOfficialGateway"] = setting.AlipayOfficialGateway
+	common.OptionMap["ManualTopUpEnabled"] = strconv.FormatBool(setting.ManualTopUpEnabled)
+	common.OptionMap["ManualTopUpAlipayQRCode"] = setting.ManualTopUpAlipayQRCode
+	common.OptionMap["ManualTopUpWeChatQRCode"] = setting.ManualTopUpWeChatQRCode
+	common.OptionMap["ManualTopUpAlipayAmountQRCodes"] = setting.ManualTopUpAlipayAmountQRCodes
+	common.OptionMap["ManualTopUpWeChatAmountQRCodes"] = setting.ManualTopUpWeChatAmountQRCodes
+	common.OptionMap["ManualTopUpInstructions"] = setting.ManualTopUpInstructions
 	common.OptionMap["WeChatPayOfficialEnabled"] = strconv.FormatBool(setting.WeChatPayOfficialEnabled)
 	common.OptionMap["WeChatPayOfficialAppId"] = setting.WeChatPayOfficialAppId
 	common.OptionMap["WeChatPayOfficialMchId"] = setting.WeChatPayOfficialMchId
@@ -391,6 +397,18 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AlipayOfficialPublicKey = value
 	case "AlipayOfficialGateway":
 		setting.AlipayOfficialGateway = value
+	case "ManualTopUpEnabled":
+		setting.ManualTopUpEnabled = value == "true"
+	case "ManualTopUpAlipayQRCode":
+		setting.ManualTopUpAlipayQRCode = value
+	case "ManualTopUpWeChatQRCode":
+		setting.ManualTopUpWeChatQRCode = value
+	case "ManualTopUpAlipayAmountQRCodes":
+		setting.ManualTopUpAlipayAmountQRCodes = value
+	case "ManualTopUpWeChatAmountQRCodes":
+		setting.ManualTopUpWeChatAmountQRCodes = value
+	case "ManualTopUpInstructions":
+		setting.ManualTopUpInstructions = value
 	case "WeChatPayOfficialEnabled":
 		setting.WeChatPayOfficialEnabled = value == "true"
 	case "WeChatPayOfficialAppId":

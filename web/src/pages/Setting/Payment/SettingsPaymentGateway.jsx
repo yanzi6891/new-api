@@ -43,6 +43,12 @@ export default function SettingsPaymentGateway(props) {
     PayMethods: '',
     AmountOptions: '',
     AmountDiscount: '',
+    ManualTopUpEnabled: false,
+    ManualTopUpAlipayQRCode: '',
+    ManualTopUpWeChatQRCode: '',
+    ManualTopUpAlipayAmountQRCodes: '',
+    ManualTopUpWeChatAmountQRCodes: '',
+    ManualTopUpInstructions: '',
   });
   const [originInputs, setOriginInputs] = useState({});
   const formApiRef = useRef(null);
@@ -66,6 +72,16 @@ export default function SettingsPaymentGateway(props) {
         PayMethods: props.options.PayMethods || '',
         AmountOptions: props.options.AmountOptions || '',
         AmountDiscount: props.options.AmountDiscount || '',
+        ManualTopUpEnabled:
+          props.options.ManualTopUpEnabled === 'true' ||
+          props.options.ManualTopUpEnabled === true,
+        ManualTopUpAlipayQRCode: props.options.ManualTopUpAlipayQRCode || '',
+        ManualTopUpWeChatQRCode: props.options.ManualTopUpWeChatQRCode || '',
+        ManualTopUpAlipayAmountQRCodes:
+          props.options.ManualTopUpAlipayAmountQRCodes || '',
+        ManualTopUpWeChatAmountQRCodes:
+          props.options.ManualTopUpWeChatAmountQRCodes || '',
+        ManualTopUpInstructions: props.options.ManualTopUpInstructions || '',
       };
 
       // 美化 JSON 展示
@@ -82,6 +98,24 @@ export default function SettingsPaymentGateway(props) {
         if (currentInputs.AmountDiscount) {
           currentInputs.AmountDiscount = JSON.stringify(
             JSON.parse(currentInputs.AmountDiscount),
+            null,
+            2,
+          );
+        }
+      } catch {}
+      try {
+        if (currentInputs.ManualTopUpAlipayAmountQRCodes) {
+          currentInputs.ManualTopUpAlipayAmountQRCodes = JSON.stringify(
+            JSON.parse(currentInputs.ManualTopUpAlipayAmountQRCodes),
+            null,
+            2,
+          );
+        }
+      } catch {}
+      try {
+        if (currentInputs.ManualTopUpWeChatAmountQRCodes) {
+          currentInputs.ManualTopUpWeChatAmountQRCodes = JSON.stringify(
+            JSON.parse(currentInputs.ManualTopUpWeChatAmountQRCodes),
             null,
             2,
           );
@@ -137,6 +171,24 @@ export default function SettingsPaymentGateway(props) {
         return;
       }
     }
+    if (
+      originInputs['ManualTopUpAlipayAmountQRCodes'] !==
+        inputs.ManualTopUpAlipayAmountQRCodes &&
+      inputs.ManualTopUpAlipayAmountQRCodes.trim() !== '' &&
+      !verifyJSON(inputs.ManualTopUpAlipayAmountQRCodes)
+    ) {
+      showError(t('支付宝固定金额收款码配置必须是合法的 JSON 对象'));
+      return;
+    }
+    if (
+      originInputs['ManualTopUpWeChatAmountQRCodes'] !==
+        inputs.ManualTopUpWeChatAmountQRCodes &&
+      inputs.ManualTopUpWeChatAmountQRCodes.trim() !== '' &&
+      !verifyJSON(inputs.ManualTopUpWeChatAmountQRCodes)
+    ) {
+      showError(t('微信固定金额收款码配置必须是合法的 JSON 对象'));
+      return;
+    }
 
     setLoading(true);
     try {
@@ -180,6 +232,30 @@ export default function SettingsPaymentGateway(props) {
           value: inputs.AmountDiscount,
         });
       }
+      options.push({
+        key: 'ManualTopUpEnabled',
+        value: inputs.ManualTopUpEnabled ? 'true' : 'false',
+      });
+      options.push({
+        key: 'ManualTopUpAlipayQRCode',
+        value: inputs.ManualTopUpAlipayQRCode || '',
+      });
+      options.push({
+        key: 'ManualTopUpWeChatQRCode',
+        value: inputs.ManualTopUpWeChatQRCode || '',
+      });
+      options.push({
+        key: 'ManualTopUpAlipayAmountQRCodes',
+        value: inputs.ManualTopUpAlipayAmountQRCodes || '',
+      });
+      options.push({
+        key: 'ManualTopUpWeChatAmountQRCodes',
+        value: inputs.ManualTopUpWeChatAmountQRCodes || '',
+      });
+      options.push({
+        key: 'ManualTopUpInstructions',
+        value: inputs.ManualTopUpInstructions || '',
+      });
 
       // 发送请求
       const requestQueue = options.map((opt) =>
@@ -222,12 +298,20 @@ export default function SettingsPaymentGateway(props) {
               '（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）',
             )}
           </Text>
+          <Text type='secondary'>
+            {t(
+              '如果你使用的是个人支付宝/微信收款码人工充值，而不是易支付网关，请不要把 PayAddress 配成前端地址，也不要继续保留 alipay/wxpay 的旧在线支付配置。',
+            )}
+          </Text>
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='PayAddress'
                 label={t('支付地址')}
                 placeholder={t('例如：https://yourdomain.com')}
+                extraText={t(
+                  '这里只填写真实易支付网关地址。若仅使用个人收款码人工充值，可留空。',
+                )}
               />
             </Col>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
@@ -284,7 +368,77 @@ export default function SettingsPaymentGateway(props) {
             label={t('充值方式设置')}
             placeholder={t('为一个 JSON 文本')}
             autosize
+            extraText={t(
+              '若仅使用个人收款码人工充值，建议删除 alipay、wxpay，避免钱包页继续出现旧的 submit.php 在线支付入口。',
+            )}
           />
+
+          <Row
+            gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+            style={{ marginTop: 16 }}
+          >
+            <Col span={24}>
+              <Form.Switch
+                field='ManualTopUpEnabled'
+                label={t('启用个人收款码人工充值')}
+              />
+              <Text type='secondary'>
+                {t(
+                  '个人收款码人工充值不会跳转 submit.php，而是生成待审核订单，到账后由管理员手动补单。',
+                )}
+              </Text>
+            </Col>
+            <Col xs={24} sm={24} md={12}>
+              <Form.Input
+                field='ManualTopUpAlipayQRCode'
+                label={t('支付宝个人收款码图片地址')}
+                placeholder={t('例如：https://example.com/alipay-qrcode.png')}
+                extraText={t('请填写可被用户浏览器访问的图片 URL')}
+              />
+            </Col>
+            <Col xs={24} sm={24} md={12}>
+              <Form.Input
+                field='ManualTopUpWeChatQRCode'
+                label={t('微信个人收款码图片地址')}
+                placeholder={t('例如：https://example.com/wechat-qrcode.png')}
+                extraText={t('请填写可被用户浏览器访问的图片 URL')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.TextArea
+                field='ManualTopUpAlipayAmountQRCodes'
+                label={t('支付宝固定金额收款码配置')}
+                placeholder={t(
+                  'JSON 对象，例如：{"20":"https://example.com/alipay-20.png","50":"https://example.com/alipay-50.png"}',
+                )}
+                autosize
+                extraText={t(
+                  '可选。个人静态收款码无法自动带金额，如有固定金额收款码，可按充值数量配置对应图片 URL。',
+                )}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.TextArea
+                field='ManualTopUpWeChatAmountQRCodes'
+                label={t('微信固定金额收款码配置')}
+                placeholder={t(
+                  'JSON 对象，例如：{"20":"https://example.com/wechat-20.png","50":"https://example.com/wechat-50.png"}',
+                )}
+                autosize
+                extraText={t(
+                  '可选。个人静态收款码无法自动带金额，如有固定金额收款码，可按充值数量配置对应图片 URL。',
+                )}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.TextArea
+                field='ManualTopUpInstructions'
+                label={t('人工充值说明')}
+                placeholder={t('例如：付款时请备注订单号，付款后等待管理员审核。')}
+                autosize
+              />
+            </Col>
+          </Row>
 
           <Row
             gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}

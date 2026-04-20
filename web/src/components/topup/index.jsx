@@ -84,6 +84,14 @@ const TopUp = () => {
     useState(false);
   const [enableCreemTopUp, setEnableCreemTopUp] = useState(false);
   const [enableWaffoTopUp, setEnableWaffoTopUp] = useState(false);
+  const [enableManualTopUp, setEnableManualTopUp] = useState(false);
+  const [manualTopUpConfig, setManualTopUpConfig] = useState({
+    alipayQRCode: '',
+    wechatQRCode: '',
+    alipayAmountQRCodes: {},
+    wechatAmountQRCodes: {},
+    instructions: '',
+  });
   const [statusLoading, setStatusLoading] = useState(true);
 
   const [creemProducts, setCreemProducts] = useState([]);
@@ -376,9 +384,10 @@ const TopUp = () => {
         nextEnableAlipayOfficialTopUp || nextEnableWeChatOfficialTopUp;
       const nextEnableCreemTopUp = data.enable_creem_topup || false;
       const nextEnableWaffoTopUp = data.enable_waffo_topup || false;
+      const nextEnableManualTopUp = data.enable_manual_topup || false;
 
       const nextMinTopUp =
-        nextEnableOnlineTopUp || nextEnableOfficialTopUp
+        nextEnableOnlineTopUp || nextEnableOfficialTopUp || nextEnableManualTopUp
           ? Number(data.min_topup || 1)
           : nextEnableStripeTopUp
             ? Number(data.stripe_min_topup || 1)
@@ -398,6 +407,36 @@ const TopUp = () => {
       setEnableOfficialTopUp(nextEnableOfficialTopUp);
       setEnableCreemTopUp(nextEnableCreemTopUp);
       setEnableWaffoTopUp(nextEnableWaffoTopUp);
+      setEnableManualTopUp(nextEnableManualTopUp);
+      let alipayAmountQRCodes = {};
+      let wechatAmountQRCodes = {};
+      try {
+        alipayAmountQRCodes = JSON.parse(
+          data.manual_topup_alipay_amount_qrcodes || '{}',
+        );
+      } catch (error) {
+        alipayAmountQRCodes = {};
+      }
+      try {
+        wechatAmountQRCodes = JSON.parse(
+          data.manual_topup_wechat_amount_qrcodes || '{}',
+        );
+      } catch (error) {
+        wechatAmountQRCodes = {};
+      }
+      setManualTopUpConfig({
+        alipayQRCode: data.manual_topup_alipay_qrcode || '',
+        wechatQRCode: data.manual_topup_wechat_qrcode || '',
+        alipayAmountQRCodes:
+          alipayAmountQRCodes && typeof alipayAmountQRCodes === 'object'
+            ? alipayAmountQRCodes
+            : {},
+        wechatAmountQRCodes:
+          wechatAmountQRCodes && typeof wechatAmountQRCodes === 'object'
+            ? wechatAmountQRCodes
+            : {},
+        instructions: data.manual_topup_instructions || '',
+      });
       setWaffoPayMethods(data.waffo_pay_methods || []);
       setWaffoMinTopUp(Number(data.waffo_min_topup || 1));
       setMinTopUp(nextMinTopUp);
@@ -709,6 +748,36 @@ const TopUp = () => {
     }
   };
 
+  const manualTopUp = async (paymentMethod) => {
+    if (!enableManualTopUp) {
+      showError(t('管理员未开启人工充值'));
+      return null;
+    }
+    if (Number(topUpCount || 0) < Number(minTopUp || 1)) {
+      showError(t('充值数量不能小于') + minTopUp);
+      return null;
+    }
+    setPaymentLoading(true);
+    try {
+      const res = await API.post('/api/user/manual/pay', {
+        amount: Number.parseInt(topUpCount, 10),
+        payment_method: paymentMethod,
+      });
+      const { message, data } = res.data;
+      if (message !== 'success') {
+        showError(typeof data === 'string' ? data : t('提交人工充值订单失败'));
+        return null;
+      }
+      showSuccess(t('订单已创建，请扫码付款'));
+      return data;
+    } catch (error) {
+      showError(t('提交人工充值订单失败'));
+      return null;
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const transfer = async () => {
     if (transferAmount < getQuotaPerUnit()) {
       showError(t('划转金额最低为') + ' ' + renderQuota(getQuotaPerUnit()));
@@ -753,12 +822,10 @@ const TopUp = () => {
     setSelectedCreemProduct(null);
   };
 
-  const selectPresetAmount = (preset) => {
+  const selectPresetAmount = async (preset) => {
     setTopUpCount(preset.value);
     setSelectedPreset(preset.value);
-    const discount = preset.discount || topupInfo.discount[preset.value] || 1.0;
-    const discountedAmount = preset.value * priceRatio * discount;
-    setAmount(Number(discountedAmount.toFixed(2)));
+    await getAmount(preset.value);
   };
 
   useEffect(() => {
@@ -948,6 +1015,9 @@ const TopUp = () => {
           enableWaffoTopUp={enableWaffoTopUp}
           waffoTopUp={waffoTopUp}
           waffoPayMethods={waffoPayMethods}
+          enableManualTopUp={enableManualTopUp}
+          manualTopUp={manualTopUp}
+          manualTopUpConfig={manualTopUpConfig}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}

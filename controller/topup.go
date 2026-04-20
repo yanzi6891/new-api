@@ -30,6 +30,8 @@ func GetTopUpInfo(c *gin.Context) {
 	enableStripeTopUp := setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != ""
 	enableAlipayOfficialTopUp := service.IsAlipayOfficialEnabled()
 	enableWeChatOfficialTopUp := service.IsWeChatPayOfficialEnabled()
+	enableManualTopUp := setting.ManualTopUpEnabled &&
+		(setting.ManualTopUpAlipayQRCode != "" || setting.ManualTopUpWeChatQRCode != "")
 
 	// 如果启用了 Stripe 支付，添加到支付方法列表
 	if enableStripeTopUp {
@@ -102,25 +104,31 @@ func GetTopUpInfo(c *gin.Context) {
 	}
 
 	data := gin.H{
-		"enable_online_topup":          enableOnlineTopUp,
-		"enable_stripe_topup":          enableStripeTopUp,
-		"enable_alipay_official_topup": enableAlipayOfficialTopUp,
-		"enable_wechat_official_topup": enableWeChatOfficialTopUp,
-		"enable_creem_topup":           setting.CreemApiKey != "" && setting.CreemProducts != "[]",
-		"enable_waffo_topup":           enableWaffo,
+		"enable_online_topup":                enableOnlineTopUp,
+		"enable_stripe_topup":                enableStripeTopUp,
+		"enable_alipay_official_topup":       enableAlipayOfficialTopUp,
+		"enable_wechat_official_topup":       enableWeChatOfficialTopUp,
+		"enable_manual_topup":                enableManualTopUp,
+		"manual_topup_alipay_qrcode":         setting.ManualTopUpAlipayQRCode,
+		"manual_topup_wechat_qrcode":         setting.ManualTopUpWeChatQRCode,
+		"manual_topup_alipay_amount_qrcodes": setting.ManualTopUpAlipayAmountQRCodes,
+		"manual_topup_wechat_amount_qrcodes": setting.ManualTopUpWeChatAmountQRCodes,
+		"manual_topup_instructions":          setting.ManualTopUpInstructions,
+		"enable_creem_topup":                 setting.CreemApiKey != "" && setting.CreemProducts != "[]",
+		"enable_waffo_topup":                 enableWaffo,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
 			}
 			return nil
 		}(),
-		"creem_products": setting.CreemProducts,
-		"pay_methods":         payMethods,
-		"min_topup":           operation_setting.MinTopUp,
-		"stripe_min_topup":    setting.StripeMinTopUp,
-		"waffo_min_topup":     setting.WaffoMinTopUp,
-		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
-		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
+		"creem_products":   setting.CreemProducts,
+		"pay_methods":      payMethods,
+		"min_topup":        operation_setting.MinTopUp,
+		"stripe_min_topup": setting.StripeMinTopUp,
+		"waffo_min_topup":  setting.WaffoMinTopUp,
+		"amount_options":   operation_setting.GetPaymentSetting().AmountOptions,
+		"discount":         operation_setting.GetPaymentSetting().AmountDiscount,
 	}
 	common.ApiSuccess(c, data)
 }
@@ -130,8 +138,92 @@ type EpayRequest struct {
 	PaymentMethod string `json:"payment_method"`
 }
 
+type ManualTopUpRequest struct {
+	Amount        int64  `json:"amount"`
+	PaymentMethod string `json:"payment_method"`
+	Remark        string `json:"remark"`
+}
+
 type AmountRequest struct {
 	Amount int64 `json:"amount"`
+}
+
+func RequestManualTopUp(c *gin.Context) {
+	if !setting.ManualTopUpEnabled {
+		c.JSON(200, gin.H{"message": "error", "data": "管理员未开启人工充值"})
+		return
+	}
+
+	var req ManualTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": "参数错误"})
+		return
+	}
+	if req.PaymentMethod != "manual_alipay" && req.PaymentMethod != "manual_wechat" {
+		c.JSON(200, gin.H{"message": "error", "data": "不支持的人工充值方式"})
+		return
+	}
+	if req.PaymentMethod == "manual_alipay" && setting.ManualTopUpAlipayQRCode == "" {
+		c.JSON(200, gin.H{"message": "error", "data": "管理员未配置支付宝收款码"})
+		return
+	}
+	if req.PaymentMethod == "manual_wechat" && setting.ManualTopUpWeChatQRCode == "" {
+		c.JSON(200, gin.H{"message": "error", "data": "管理员未配置微信收款码"})
+		return
+	}
+	if req.Amount < getMinTopup() {
+		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于%d", getMinTopup())})
+		return
+	}
+
+	userID := c.GetInt("id")
+	group, err := model.GetUserGroup(userID, true)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": "获取用户分组失败"})
+		return
+	}
+	payMoney := getPayMoney(req.Amount, group)
+	if payMoney < 0.01 {
+		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
+		return
+	}
+
+	amount := req.Amount
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		dAmount := decimal.NewFromInt(amount)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		amount = dAmount.Div(dQuotaPerUnit).IntPart()
+	}
+
+	tradeNo := fmt.Sprintf("MANUSR%dNO%s%d", userID, common.GetRandomString(6), time.Now().Unix())
+	topUp := &model.TopUp{
+		UserId:        userID,
+		Amount:        amount,
+		Money:         payMoney,
+		TradeNo:       tradeNo,
+		PaymentMethod: req.PaymentMethod,
+		CreateTime:    time.Now().Unix(),
+		Status:        common.TopUpStatusPending,
+	}
+	if err := topUp.Insert(); err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": "创建人工充值订单失败"})
+		return
+	}
+
+	remark := req.Remark
+	if remark == "" {
+		remark = tradeNo
+	}
+	model.RecordLog(userID, model.LogTypeTopup, fmt.Sprintf("提交人工充值待审核，订单号：%s，备注：%s，支付金额：%.2f", tradeNo, remark, payMoney))
+
+	c.JSON(200, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"trade_no": tradeNo,
+			"amount":   amount,
+			"money":    payMoney,
+		},
+	})
 }
 
 func GetEpayClient() *epay.Client {

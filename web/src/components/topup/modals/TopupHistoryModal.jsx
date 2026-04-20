@@ -57,6 +57,8 @@ const PAYMENT_METHOD_MAP = {
   wxpay: '微信',
   alipay_official: '支付宝官方',
   wxpay_native: '微信支付官方',
+  manual_alipay: '支付宝人工充值',
+  manual_wechat: '微信人工充值',
 };
 
 const TopupHistoryModal = ({ visible, onCancel, t }) => {
